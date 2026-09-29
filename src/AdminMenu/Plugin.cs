@@ -485,13 +485,13 @@ public sealed class AdminMenuController : MonoBehaviour
 
 public sealed class AdminLogEntry
 {
-    public DateTime Timestamp { get; init; }
-    public string Category { get; init; } = "General";
-    public string Message { get; init; } = string.Empty;
-    public string? Details { get; init; }
-    public bool IsError { get; init; }
-    public bool CurrentSession { get; init; }
-    public bool IsSeparator { get; init; }
+    public DateTime Timestamp { get; set; }
+    public string Category { get; set; } = "General";
+    public string Message { get; set; } = string.Empty;
+    public string? Details { get; set; }
+    public bool IsError { get; set; }
+    public bool CurrentSession { get; set; }
+    public bool IsSeparator { get; set; }
 
     public string CompactText => $"[{Timestamp:HH:mm:ss}] {Message}";
 }
