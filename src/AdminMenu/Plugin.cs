@@ -16,7 +16,7 @@ public sealed class Plugin : BaseUnityPlugin
     public const string PluginName = "Admin Menu";
     public const string PluginVersion = "0.1.0";
 
-    private AdminMenuController? _controller;
+    private AdminMenuRuntime? _runtime;
 
     private void Awake()
     {
@@ -25,8 +25,10 @@ public sealed class Plugin : BaseUnityPlugin
             AdminMenuConfig.Initialize(Config);
             AdminLog.Initialize(Logger);
 
-            _controller = new AdminMenuController();
-            _controller.Initialize();
+            var runtimeObject = new GameObject("AdminMenu.Runtime");
+            DontDestroyOnLoad(runtimeObject);
+            _runtime = runtimeObject.AddComponent<AdminMenuRuntime>();
+            _runtime.Initialize();
 
             AdminLog.Info($"{PluginName} {PluginVersion} initialized.");
         }
@@ -37,20 +39,54 @@ public sealed class Plugin : BaseUnityPlugin
         }
     }
 
+    private void OnDestroy()
+    {
+        if (_runtime != null)
+            Destroy(_runtime.gameObject);
+
+        AdminLog.Shutdown();
+    }
+}
+
+public sealed class AdminMenuRuntime : MonoBehaviour
+{
+    private AdminMenuController? _controller;
+    private bool _loggedUpdate;
+    private bool _loggedGui;
+
+    public void Initialize()
+    {
+        _controller = new AdminMenuController();
+        _controller.Initialize();
+        AdminLog.Info("Dedicated Admin Menu runtime created.", "Runtime");
+    }
+
     private void Update()
     {
+        if (!_loggedUpdate)
+        {
+            _loggedUpdate = true;
+            AdminLog.Info("Runtime Update callback active.", "Runtime");
+        }
+
         _controller?.Tick();
     }
 
     private void OnGUI()
     {
+        if (!_loggedGui)
+        {
+            _loggedGui = true;
+            AdminLog.Info("Runtime OnGUI callback active.", "Runtime");
+        }
+
         _controller?.Draw();
     }
 
     private void OnDestroy()
     {
         _controller?.Shutdown();
-        AdminLog.Shutdown();
+        _controller = null;
     }
 }
 
@@ -62,17 +98,17 @@ public enum ExpandedLogSide
 
 public static class AdminMenuConfig
 {
-    public static ConfigEntry<KeyboardShortcut> OpenMenu { get; private set; } = null!;
-    public static ConfigEntry<KeyboardShortcut> SuspendRestore { get; private set; } = null!;
-    public static ConfigEntry<KeyboardShortcut> TargetMode { get; private set; } = null!;
+    public static ConfigEntry<KeyCode> OpenMenu { get; private set; } = null!;
+    public static ConfigEntry<KeyCode> SuspendRestore { get; private set; } = null!;
+    public static ConfigEntry<KeyCode> TargetMode { get; private set; } = null!;
     public static ConfigEntry<ExpandedLogSide> LogSide { get; private set; } = null!;
     public static ConfigEntry<float> UiScale { get; private set; } = null!;
 
     public static void Initialize(ConfigFile config)
     {
-        OpenMenu = config.Bind("Hotkeys", "OpenMenu", new KeyboardShortcut(KeyCode.F7), "Open or close Admin Menu.");
-        SuspendRestore = config.Bind("Hotkeys", "SuspendRestore", new KeyboardShortcut(KeyCode.F8), "Temporarily suspend or restore Admin Menu overrides.");
-        TargetMode = config.Bind("Hotkeys", "TargetMode", new KeyboardShortcut(KeyCode.F6), "Reserved for Admin Target Mode.");
+        OpenMenu = config.Bind("Hotkeys", "OpenMenu", KeyCode.F7, "Open or close Admin Menu.");
+        SuspendRestore = config.Bind("Hotkeys", "SuspendRestore", KeyCode.F8, "Temporarily suspend or restore Admin Menu overrides.");
+        TargetMode = config.Bind("Hotkeys", "TargetMode", KeyCode.F6, "Reserved for Admin Target Mode.");
         LogSide = config.Bind("UI", "ExpandedLogSide", ExpandedLogSide.Right, "Side used by the expanded log.");
         UiScale = config.Bind("UI", "Scale", 1.0f, new ConfigDescription("Admin Menu UI scale.", new AcceptableValueRange<float>(0.75f, 1.5f)));
     }
@@ -136,10 +172,10 @@ public sealed class AdminMenuController
         if (!_initialized)
             return;
 
-        if (AdminMenuConfig.OpenMenu.Value.IsDown())
+        if (Input.GetKeyDown(AdminMenuConfig.OpenMenu.Value))
             SetMenuOpen(!_menuOpen);
 
-        if (AdminMenuConfig.SuspendRestore.Value.IsDown())
+        if (Input.GetKeyDown(AdminMenuConfig.SuspendRestore.Value))
         {
             _suspended = !_suspended;
             AdminLog.Action(_suspended ? "Admin overrides temporarily suspended." : "Admin overrides restored.", "System");
@@ -217,8 +253,8 @@ public sealed class AdminMenuController
     private void DrawHudDot()
     {
         var previous = GUI.color;
-        GUI.color = _suspended ? new Color(1f, 0.25f, 0.25f) : Color.white;
-        GUI.Label(new Rect(Screen.width - 28f, 8f, 20f, 20f), "●");
+        GUI.color = _suspended ? new Color(1f, 0.2f, 0.2f) : Color.white;
+        GUI.DrawTexture(new Rect(Screen.width - 20f, 10f, 10f, 10f), Texture2D.whiteTexture);
         GUI.color = previous;
     }
 
