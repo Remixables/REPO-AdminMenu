@@ -9,10 +9,17 @@ namespace AdminMenu;
 
 internal static class NativeAdminMenu
 {
+    private sealed class FixedElement
+    {
+        internal RectTransform Rect = null!;
+        internal Vector2 BasePosition;
+    }
+
     private static readonly Stack<REPOPopupPage> PageStack = new();
+    private static readonly Dictionary<REPOPopupPage, List<FixedElement>> FixedElements = new();
 
     // MenuLib's built-in Left and Right popup positions are about -280 and +40.
-    // Their midpoint (-120) is the visually centered position.
+    // Their midpoint (-120) is the centered position.
     private static readonly Vector2 NormalContentPosition = new(-120f, 0f);
     private static readonly Vector2 LeftContentPosition = new(-280f, 0f);
     private static readonly Vector2 RightContentPosition = new(40f, 0f);
@@ -59,6 +66,7 @@ internal static class NativeAdminMenu
     {
         AdminLog.ErrorRaised -= OnAdminError;
         PageStack.Clear();
+        FixedElements.Clear();
         _currentPage = null;
         _expandedLogPage = null;
         _initialized = false;
@@ -100,7 +108,7 @@ internal static class NativeAdminMenu
                 page,
                 "Close",
                 CloseAdminMenu,
-                new Vector2(250f, 20f));
+                new Vector2(420f, 18f));
 
             page.onEscapePressed = () =>
             {
@@ -144,7 +152,7 @@ internal static class NativeAdminMenu
                 page,
                 "Back",
                 () => GoBack(page),
-                new Vector2(230f, 20f));
+                new Vector2(420f, 18f));
 
             page.onEscapePressed = () =>
             {
@@ -176,6 +184,7 @@ internal static class NativeAdminMenu
         var reopenExpandedLog = DetachExpandedLogForNavigation();
 
         page.ClosePage(false);
+        FixedElements.Remove(page);
 
         if (_currentPage == page)
             _currentPage = PageStack.Count > 0 ? PageStack.Pop() : null;
@@ -194,6 +203,7 @@ internal static class NativeAdminMenu
         var page = _expandedLogPage;
         _expandedLogPage = null;
         page.ClosePage(false);
+        FixedElements.Remove(page);
         return true;
     }
 
@@ -202,18 +212,26 @@ internal static class NativeAdminMenu
         try
         {
             if (_expandedLogPage != null && _expandedLogPage.isActiveAndEnabled)
+            {
                 _expandedLogPage.ClosePage(false);
+                FixedElements.Remove(_expandedLogPage);
+            }
 
             _expandedLogPage = null;
 
             if (_currentPage != null && _currentPage.isActiveAndEnabled)
+            {
                 _currentPage.ClosePage(false);
+                FixedElements.Remove(_currentPage);
+            }
 
             while (PageStack.Count > 0)
             {
                 var page = PageStack.Pop();
                 if (page != null && page.isActiveAndEnabled)
                     page.ClosePage(false);
+
+                FixedElements.Remove(page);
             }
 
             _currentPage = null;
@@ -222,6 +240,7 @@ internal static class NativeAdminMenu
         {
             Plugin.Log.LogError("Failed to close Admin Menu cleanly: " + ex);
             PageStack.Clear();
+            FixedElements.Clear();
             _currentPage = null;
             _expandedLogPage = null;
         }
@@ -236,12 +255,13 @@ internal static class NativeAdminMenu
             spacing: 1.5f,
             localPosition: GetContentPosition());
 
-        // Compact Action History is a fixed footer, not part of the scrolling content.
-        // Reserve enough scroll area so normal menu content can never overlap it.
+        // Leave a modest dedicated strip for the compact Action History footer.
+        // The footer itself is attached to the popup root so it does not scroll.
         var padding = page.maskPadding;
-        padding.bottom = 175f;
+        padding.bottom = 120f;
         page.maskPadding = padding;
 
+        FixedElements[page] = new List<FixedElement>();
         return page;
     }
 
@@ -250,12 +270,15 @@ internal static class NativeAdminMenu
         REPOPopupPage.PresetSide side,
         bool dimBackground)
     {
-        return MenuAPI.CreateREPOPopupPage(
+        var page = MenuAPI.CreateREPOPopupPage(
             title,
             side,
             shouldCachePage: false,
             pageDimmerVisibility: dimBackground,
             spacing: 1.5f);
+
+        FixedElements[page] = new List<FixedElement>();
+        return page;
     }
 
     private static void AddButton(REPOPopupPage page, string text, Action action)
@@ -271,13 +294,15 @@ internal static class NativeAdminMenu
         REPOPopupPage page,
         string text,
         Action action,
-        Vector2 localPosition)
+        Vector2 basePosition)
     {
-        MenuAPI.CreateREPOButton(
+        var button = MenuAPI.CreateREPOButton(
             text,
             action,
-            page.rectTransform,
-            localPosition);
+            page.transform,
+            basePosition);
+
+        RegisterFixedElement(page, button.rectTransform, basePosition);
     }
 
     private static void AddCompactLogFooter(REPOPopupPage page)
@@ -287,13 +312,13 @@ internal static class NativeAdminMenu
         AddFixedLogLabel(
             page,
             "Action History",
-            new Vector2(-215f, 146f),
+            new Vector2(72f, 112f),
             18f,
-            24f,
+            22f,
             wrap: false);
 
-        // Newest stays at the bottom.
-        var firstY = 113f;
+        // Oldest of the three at the top, newest at the bottom.
+        var firstY = 84f;
         for (var i = 0; i < recent.Count; i++)
         {
             var entry = recent[i];
@@ -304,9 +329,9 @@ internal static class NativeAdminMenu
             AddFixedLogLabel(
                 page,
                 text,
-                new Vector2(-215f, firstY - (i * 30f)),
+                new Vector2(72f, firstY - (i * 22f)),
                 11f,
-                30f,
+                22f,
                 wrap: true);
         }
 
@@ -314,21 +339,21 @@ internal static class NativeAdminMenu
             page,
             "Expand Log >",
             OpenExpandedLog,
-            new Vector2(-205f, 20f));
+            new Vector2(72f, 18f));
     }
 
     private static void AddFixedLogLabel(
         REPOPopupPage page,
         string text,
-        Vector2 localPosition,
+        Vector2 basePosition,
         float fontSize,
         float height,
         bool wrap)
     {
         var label = MenuAPI.CreateREPOLabel(
             text,
-            page.rectTransform,
-            localPosition);
+            page.transform,
+            basePosition);
 
         StyleLogLabel(
             label,
@@ -337,6 +362,26 @@ internal static class NativeAdminMenu
             height,
             wrap,
             dynamicHeight: false);
+
+        RegisterFixedElement(page, label.rectTransform, basePosition);
+    }
+
+    private static void RegisterFixedElement(
+        REPOPopupPage page,
+        RectTransform rect,
+        Vector2 basePosition)
+    {
+        if (!FixedElements.TryGetValue(page, out var elements))
+        {
+            elements = new List<FixedElement>();
+            FixedElements[page] = elements;
+        }
+
+        elements.Add(new FixedElement
+        {
+            Rect = rect,
+            BasePosition = basePosition
+        });
     }
 
     internal static void OpenExpandedLog()
@@ -392,7 +437,7 @@ internal static class NativeAdminMenu
                 page,
                 "Close",
                 () => CloseExpandedLog(page),
-                new Vector2(250f, 20f));
+                new Vector2(270f, 18f));
 
             page.onEscapePressed = () =>
             {
@@ -401,6 +446,13 @@ internal static class NativeAdminMenu
             };
 
             page.OpenPage(true);
+
+            ApplyPagePosition(
+                page,
+                AdminMenuConfig.LogSide.Value == ExpandedLogSide.Left
+                    ? LeftContentPosition
+                    : RightContentPosition);
+
             ApplyCurrentPagePosition(expandedLogExpected: true);
         }
         catch (Exception ex)
@@ -417,6 +469,7 @@ internal static class NativeAdminMenu
                 : ExpandedLogSide.Left;
 
         currentLogPage.ClosePage(false);
+        FixedElements.Remove(currentLogPage);
 
         if (_expandedLogPage == currentLogPage)
             _expandedLogPage = null;
@@ -428,6 +481,7 @@ internal static class NativeAdminMenu
     private static void CloseExpandedLog(REPOPopupPage page)
     {
         page.ClosePage(false);
+        FixedElements.Remove(page);
 
         if (_expandedLogPage == page)
             _expandedLogPage = null;
@@ -455,10 +509,30 @@ internal static class NativeAdminMenu
         if (_currentPage == null)
             return;
 
-        _currentPage.rectTransform.localPosition =
+        ApplyPagePosition(
+            _currentPage,
             expandedLogExpected || ExpandedLogIsOpen
                 ? GetContentPositionForExpandedLog()
-                : NormalContentPosition;
+                : NormalContentPosition);
+    }
+
+    private static void ApplyPagePosition(REPOPopupPage page, Vector2 targetPosition)
+    {
+        page.rectTransform.localPosition = targetPosition;
+
+        if (!FixedElements.TryGetValue(page, out var elements))
+            return;
+
+        var offset = targetPosition.x - NormalContentPosition.x;
+
+        foreach (var element in elements)
+        {
+            if (element.Rect == null)
+                continue;
+
+            element.Rect.localPosition =
+                element.BasePosition + new Vector2(offset, 0f);
+        }
     }
 
     private static void StyleLogLabel(
