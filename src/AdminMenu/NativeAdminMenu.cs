@@ -281,7 +281,53 @@ internal static class NativeAdminMenu
             new Vector2(380f, 12f));
 
         button.labelTMP.fontSize = 18f;
-        button.overrideButtonSize = new Vector2(145f, 28f);
+
+        // Keep the clickable area close to the rendered text instead of
+        // using a large fixed rectangle.
+        var preferred = button.GetLabelSize();
+        var buttonSize = new Vector2(
+            preferred.x + 14f,
+            Mathf.Max(24f, preferred.y + 6f));
+
+        button.overrideButtonSize = buttonSize;
+        button.rectTransform.sizeDelta = buttonSize;
+
+        ClampButtonInsidePanel(page, button.rectTransform, 10f);
+    }
+
+    private static void ClampButtonInsidePanel(
+        REPOPopupPage page,
+        RectTransform buttonRect,
+        float padding)
+    {
+        if (page.rectTransform.Find("Panel") is not RectTransform panelRect)
+            return;
+
+        // Panel and button share the same parent coordinate space.
+        var panelPosition = panelRect.localPosition;
+        var left = panelPosition.x + panelRect.rect.xMin + padding;
+        var right = panelPosition.x + panelRect.rect.xMax - padding;
+        var bottom = panelPosition.y + panelRect.rect.yMin + padding;
+        var top = panelPosition.y + panelRect.rect.yMax - padding;
+
+        var position = buttonRect.localPosition;
+
+        var buttonLeft = position.x + buttonRect.rect.xMin;
+        var buttonRight = position.x + buttonRect.rect.xMax;
+        var buttonBottom = position.y + buttonRect.rect.yMin;
+        var buttonTop = position.y + buttonRect.rect.yMax;
+
+        if (buttonLeft < left)
+            position.x += left - buttonLeft;
+        else if (buttonRight > right)
+            position.x -= buttonRight - right;
+
+        if (buttonBottom < bottom)
+            position.y += bottom - buttonBottom;
+        else if (buttonTop > top)
+            position.y -= buttonTop - top;
+
+        buttonRect.localPosition = position;
     }
 
     private static void AddCompactLogFooter(REPOPopupPage page)
