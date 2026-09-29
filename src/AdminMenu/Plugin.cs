@@ -25,7 +25,7 @@ public sealed class Plugin : BaseUnityPlugin
             AdminMenuConfig.Initialize(Config);
             AdminLog.Initialize(Logger);
 
-            _controller = gameObject.AddComponent<AdminMenuController>();
+            _controller = new AdminMenuController();
             _controller.Initialize();
 
             AdminLog.Info($"{PluginName} {PluginVersion} initialized.");
@@ -37,8 +37,19 @@ public sealed class Plugin : BaseUnityPlugin
         }
     }
 
+    private void Update()
+    {
+        _controller?.Tick();
+    }
+
+    private void OnGUI()
+    {
+        _controller?.Draw();
+    }
+
     private void OnDestroy()
     {
+        _controller?.Shutdown();
         AdminLog.Shutdown();
     }
 }
@@ -78,7 +89,7 @@ public enum AdminRoute
     Settings
 }
 
-public sealed class AdminMenuController : MonoBehaviour
+public sealed class AdminMenuController
 {
     private const int MainWindowId = 778410;
     private const int LogWindowId = 778411;
@@ -114,13 +125,13 @@ public sealed class AdminMenuController : MonoBehaviour
         AdminLog.Action("Admin Menu UI controller initialized.", "UI");
     }
 
-    private void OnDestroy()
+    public void Shutdown()
     {
         AdminLog.ErrorRaised -= OnAdminError;
         RestoreCursor();
     }
 
-    private void Update()
+    public void Tick()
     {
         if (!_initialized)
             return;
@@ -185,7 +196,7 @@ public sealed class AdminMenuController : MonoBehaviour
         _expandedScroll.y = float.MaxValue;
     }
 
-    private void OnGUI()
+    public void Draw()
     {
         if (!_initialized)
             return;
