@@ -122,13 +122,13 @@ internal static class NativeAdminMenu
         }
     }
 
-    private static REPOPopupPage CreatePage(string title, REPOPopupPage.PresetSide side)
+    private static REPOPopupPage CreatePage(string title, REPOPopupPage.PresetSide side, bool dimBackground = true)
     {
         return MenuAPI.CreateREPOPopupPage(
             title,
             side,
             shouldCachePage: false,
-            pageDimmerVisibility: true,
+            pageDimmerVisibility: dimBackground,
             spacing: 1.5f);
     }
 
@@ -177,7 +177,7 @@ internal static class NativeAdminMenu
                 ? REPOPopupPage.PresetSide.Left
                 : REPOPopupPage.PresetSide.Right;
 
-            var page = CreatePage("Action History", side);
+            var page = CreatePage("Action History", side, dimBackground: false);
             _expandedLogPage = page;
 
             AddButton(page,
@@ -202,7 +202,7 @@ internal static class NativeAdminMenu
                         : entry.FullText;
 
                     var label = MenuAPI.CreateREPOLabel(text, scroll);
-                    StyleLogLabel(label, 12f, 18f);
+                    StyleLogLabel(label, 11f, 18f);
                     return label.rectTransform;
                 });
             }
