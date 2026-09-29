@@ -1,0 +1,32 @@
+name: Build AdminMenu
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore AdminMenu.sln
+
+      - name: Build
+        run: dotnet build AdminMenu.sln -c Release --no-restore
+
+      - name: Upload DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: AdminMenu-DLL
+          path: bin/Release/netstandard2.1/AdminMenu.dll
