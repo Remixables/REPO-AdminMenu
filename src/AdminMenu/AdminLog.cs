@@ -13,9 +13,13 @@ internal sealed class AdminLogEntry
     internal string Category { get; set; } = "General";
     internal string Message { get; set; } = string.Empty;
     internal bool IsError { get; set; }
+    internal bool PreviousSession { get; set; }
 
-    internal string CompactText => "[" + Timestamp.ToString("HH:mm:ss") + "] " + Message;
-    internal string FullText => "[" + Timestamp.ToString("HH:mm:ss") + "] [" + Category + "] " + Message;
+    internal string CompactText =>
+        "[" + Timestamp.ToString("HH:mm:ss") + "] " + Message;
+
+    internal string FullText =>
+        "[" + Timestamp.ToString("HH:mm:ss") + "] [" + Category + "] " + Message;
 }
 
 internal static class AdminLog
@@ -89,7 +93,8 @@ internal static class AdminLog
             Timestamp = DateTime.Now,
             Category = category,
             Message = message,
-            IsError = error
+            IsError = error,
+            PreviousSession = false
         };
 
         lock (Gate)
@@ -117,24 +122,85 @@ internal static class AdminLog
         try
         {
             var lines = File.ReadAllLines(_logPath);
+
             foreach (var line in lines.Skip(Math.Max(0, lines.Length - 300)))
             {
                 if (string.IsNullOrWhiteSpace(line) || line.StartsWith("=========="))
                     continue;
 
-                InternalEntries.Add(new AdminLogEntry
-                {
-                    Timestamp = DateTime.MinValue,
-                    Category = "Previous Session",
-                    Message = line,
-                    IsError = line.Contains("[ERROR]")
-                });
+                if (TryParseStoredLine(line, out var entry))
+                    InternalEntries.Add(entry);
             }
         }
         catch (Exception ex)
         {
             _logger?.LogWarning("Could not load previous Admin_Menu.log: " + ex.Message);
         }
+    }
+
+    private static bool TryParseStoredLine(string line, out AdminLogEntry entry)
+    {
+        entry = null!;
+
+        var cursor = 0;
+
+        if (!TryReadBracketValue(line, ref cursor, out var timestampText) ||
+            !DateTime.TryParse(timestampText, out var timestamp))
+        {
+            return false;
+        }
+
+        SkipSpaces(line, ref cursor);
+
+        if (!TryReadBracketValue(line, ref cursor, out var level))
+            return false;
+
+        SkipSpaces(line, ref cursor);
+
+        if (!TryReadBracketValue(line, ref cursor, out var category))
+            return false;
+
+        SkipSpaces(line, ref cursor);
+
+        var message = cursor < line.Length
+            ? line.Substring(cursor)
+            : string.Empty;
+
+        entry = new AdminLogEntry
+        {
+            Timestamp = timestamp,
+            Category = category,
+            Message = message,
+            IsError = string.Equals(level, "ERROR", StringComparison.OrdinalIgnoreCase),
+            PreviousSession = true
+        };
+
+        return true;
+    }
+
+    private static bool TryReadBracketValue(
+        string text,
+        ref int cursor,
+        out string value)
+    {
+        value = string.Empty;
+
+        if (cursor >= text.Length || text[cursor] != '[')
+            return false;
+
+        var end = text.IndexOf(']', cursor + 1);
+        if (end < 0)
+            return false;
+
+        value = text.Substring(cursor + 1, end - cursor - 1);
+        cursor = end + 1;
+        return true;
+    }
+
+    private static void SkipSpaces(string text, ref int cursor)
+    {
+        while (cursor < text.Length && char.IsWhiteSpace(text[cursor]))
+            cursor++;
     }
 
     private static void AppendRaw(string line)
