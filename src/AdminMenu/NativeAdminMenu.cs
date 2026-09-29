@@ -148,6 +148,7 @@ internal static class NativeAdminMenu
         page.AddElementToScrollView(scroll =>
         {
             var label = MenuAPI.CreateREPOLabel("Action History", scroll);
+            StyleLogLabel(label, 18f, 22f);
             return label.rectTransform;
         });
 
@@ -157,6 +158,7 @@ internal static class NativeAdminMenu
             {
                 var text = entry.IsError ? "<color=#ff5555>" + entry.CompactText + "</color>" : entry.CompactText;
                 var label = MenuAPI.CreateREPOLabel(text, scroll);
+                StyleLogLabel(label, 11f, 16f);
                 return label.rectTransform;
             });
         }
@@ -200,6 +202,7 @@ internal static class NativeAdminMenu
                         : entry.FullText;
 
                     var label = MenuAPI.CreateREPOLabel(text, scroll);
+                    StyleLogLabel(label, 12f, 18f);
                     return label.rectTransform;
                 });
             }
@@ -218,6 +221,18 @@ internal static class NativeAdminMenu
         {
             Plugin.Log.LogError("Failed to open expanded Admin Menu log: " + ex);
         }
+    }
+
+    private static void StyleLogLabel(REPOLabel label, float fontSize, float height)
+    {
+        const float width = 455f;
+
+        label.labelTMP.fontSize = fontSize;
+        label.labelTMP.enableAutoSizing = false;
+        label.labelTMP.enableWordWrapping = false;
+
+        label.rectTransform.sizeDelta = new Vector2(width, height);
+        label.labelTMP.rectTransform.sizeDelta = new Vector2(width, height);
     }
 
     private static REPOPopupPage.PresetSide OppositeOfLogSide()
