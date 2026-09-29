@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using MenuLib;
 using MenuLib.MonoBehaviors;
@@ -8,9 +9,18 @@ namespace AdminMenu;
 
 internal static class NativeAdminMenu
 {
+    private static readonly Stack<REPOPopupPage> PageStack = new();
+
+    private static readonly Vector2 NormalContentPosition = Vector2.zero;
+    private static readonly Vector2 LeftContentPosition = new(-280f, 0f);
+    private static readonly Vector2 RightContentPosition = new(40f, 0f);
+
     private static bool _initialized;
     private static REPOPopupPage? _currentPage;
     private static REPOPopupPage? _expandedLogPage;
+
+    private static bool ExpandedLogIsOpen =>
+        _expandedLogPage != null && _expandedLogPage.isActiveAndEnabled;
 
     internal static void Initialize()
     {
@@ -43,6 +53,7 @@ internal static class NativeAdminMenu
     internal static void Shutdown()
     {
         AdminLog.ErrorRaised -= OnAdminError;
+        PageStack.Clear();
         _currentPage = null;
         _expandedLogPage = null;
         _initialized = false;
@@ -52,8 +63,7 @@ internal static class NativeAdminMenu
     {
         if (_currentPage != null && _currentPage.isActiveAndEnabled)
         {
-            _currentPage.ClosePage(true);
-            _currentPage = null;
+            CloseAdminMenu();
             return;
         }
 
@@ -64,7 +74,12 @@ internal static class NativeAdminMenu
     {
         try
         {
-            var page = CreatePage("Admin Menu", OppositeOfLogSide());
+            if (_currentPage != null && _currentPage.isActiveAndEnabled)
+                CloseAdminMenu();
+
+            PageStack.Clear();
+
+            var page = CreateContentPage("Admin Menu");
             _currentPage = page;
 
             AddButton(page, "Players", () => OpenPlaceholder("Players"));
@@ -77,14 +92,20 @@ internal static class NativeAdminMenu
             AddCompactLog(page);
 
             page.AddElement(parent =>
-                MenuAPI.CreateREPOButton("Close", () =>
-                {
-                    page.ClosePage(true);
-                    if (_currentPage == page)
-                        _currentPage = null;
-                }, parent, new Vector2(270f, 20f)));
+                MenuAPI.CreateREPOButton(
+                    "Close",
+                    CloseAdminMenu,
+                    parent,
+                    new Vector2(270f, 20f)));
+
+            page.onEscapePressed = () =>
+            {
+                CloseAdminMenu();
+                return false;
+            };
 
             page.OpenPage(false);
+            ApplyCurrentPagePosition();
             AdminLog.Action("Opened Admin Menu.", "UI");
         }
         catch (Exception ex)
@@ -97,7 +118,8 @@ internal static class NativeAdminMenu
     {
         try
         {
-            var page = CreatePage(title, OppositeOfLogSide());
+            var previousPage = _currentPage;
+            var page = CreateContentPage(title);
 
             page.AddElementToScrollView(scroll =>
             {
@@ -110,10 +132,25 @@ internal static class NativeAdminMenu
             AddCompactLog(page);
 
             page.AddElement(parent =>
-                MenuAPI.CreateREPOButton("Back", () => page.ClosePage(false), parent, new Vector2(250f, 20f)));
+                MenuAPI.CreateREPOButton(
+                    "Back",
+                    () => GoBack(page),
+                    parent,
+                    new Vector2(250f, 20f)));
+
+            page.onEscapePressed = () =>
+            {
+                GoBack(page);
+                return false;
+            };
+
+            if (previousPage != null)
+                PageStack.Push(previousPage);
 
             page.OpenPage(false);
             _currentPage = page;
+            ApplyCurrentPagePosition();
+
             AdminLog.Action("Opened " + title + ".", "UI");
         }
         catch (Exception ex)
@@ -122,7 +159,60 @@ internal static class NativeAdminMenu
         }
     }
 
-    private static REPOPopupPage CreatePage(string title, REPOPopupPage.PresetSide side, bool dimBackground = true)
+    private static void GoBack(REPOPopupPage page)
+    {
+        page.ClosePage(false);
+
+        if (_currentPage == page)
+            _currentPage = PageStack.Count > 0 ? PageStack.Pop() : null;
+
+        ApplyCurrentPagePosition();
+    }
+
+    private static void CloseAdminMenu()
+    {
+        try
+        {
+            if (_expandedLogPage != null && _expandedLogPage.isActiveAndEnabled)
+                _expandedLogPage.ClosePage(false);
+
+            _expandedLogPage = null;
+
+            if (_currentPage != null && _currentPage.isActiveAndEnabled)
+                _currentPage.ClosePage(false);
+
+            while (PageStack.Count > 0)
+            {
+                var page = PageStack.Pop();
+                if (page != null && page.isActiveAndEnabled)
+                    page.ClosePage(false);
+            }
+
+            _currentPage = null;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.LogError("Failed to close Admin Menu cleanly: " + ex);
+            PageStack.Clear();
+            _currentPage = null;
+            _expandedLogPage = null;
+        }
+    }
+
+    private static REPOPopupPage CreateContentPage(string title)
+    {
+        return MenuAPI.CreateREPOPopupPage(
+            title,
+            shouldCachePage: false,
+            pageDimmerVisibility: true,
+            spacing: 1.5f,
+            localPosition: GetContentPosition());
+    }
+
+    private static REPOPopupPage CreateSidePage(
+        string title,
+        REPOPopupPage.PresetSide side,
+        bool dimBackground)
     {
         return MenuAPI.CreateREPOPopupPage(
             title,
@@ -156,7 +246,10 @@ internal static class NativeAdminMenu
         {
             page.AddElementToScrollView(scroll =>
             {
-                var text = entry.IsError ? "<color=#ff5555>" + entry.CompactText + "</color>" : entry.CompactText;
+                var text = entry.IsError
+                    ? "<color=#ff5555>" + entry.CompactText + "</color>"
+                    : entry.CompactText;
+
                 var label = MenuAPI.CreateREPOLabel(text, scroll);
                 StyleLogLabel(label, 11f, 16f);
                 return label.rectTransform;
@@ -170,28 +263,28 @@ internal static class NativeAdminMenu
     {
         try
         {
-            if (_expandedLogPage != null && _expandedLogPage.isActiveAndEnabled)
+            if (ExpandedLogIsOpen)
                 return;
+
+            ApplyCurrentPagePosition(expandedLogExpected: true);
 
             var side = AdminMenuConfig.LogSide.Value == ExpandedLogSide.Left
                 ? REPOPopupPage.PresetSide.Left
                 : REPOPopupPage.PresetSide.Right;
 
-            var page = CreatePage("Action History", side, dimBackground: false);
+            var page = CreateSidePage(
+                "Action History",
+                side,
+                dimBackground: false);
+
             _expandedLogPage = page;
 
-            AddButton(page,
-                AdminMenuConfig.LogSide.Value == ExpandedLogSide.Left ? "Position: Left" : "Position: Right",
-                () =>
-                {
-                    AdminMenuConfig.LogSide.Value = AdminMenuConfig.LogSide.Value == ExpandedLogSide.Left
-                        ? ExpandedLogSide.Right
-                        : ExpandedLogSide.Left;
-
-                    page.ClosePage(false);
-                    _expandedLogPage = null;
-                    OpenExpandedLog();
-                });
+            AddButton(
+                page,
+                AdminMenuConfig.LogSide.Value == ExpandedLogSide.Left
+                    ? "Position: Left"
+                    : "Position: Right",
+                () => ChangeExpandedLogSide(page));
 
             foreach (var entry in AdminLog.Entries.TakeLast(150))
             {
@@ -208,19 +301,78 @@ internal static class NativeAdminMenu
             }
 
             page.AddElement(parent =>
-                MenuAPI.CreateREPOButton("Close", () =>
-                {
-                    page.ClosePage(false);
-                    if (_expandedLogPage == page)
-                        _expandedLogPage = null;
-                }, parent, new Vector2(270f, 20f)));
+                MenuAPI.CreateREPOButton(
+                    "Close",
+                    () => CloseExpandedLog(page),
+                    parent,
+                    new Vector2(270f, 20f)));
+
+            page.onEscapePressed = () =>
+            {
+                CloseExpandedLog(page);
+                return false;
+            };
 
             page.OpenPage(true);
+            ApplyCurrentPagePosition(expandedLogExpected: true);
         }
         catch (Exception ex)
         {
             Plugin.Log.LogError("Failed to open expanded Admin Menu log: " + ex);
         }
+    }
+
+    private static void ChangeExpandedLogSide(REPOPopupPage currentLogPage)
+    {
+        AdminMenuConfig.LogSide.Value =
+            AdminMenuConfig.LogSide.Value == ExpandedLogSide.Left
+                ? ExpandedLogSide.Right
+                : ExpandedLogSide.Left;
+
+        ApplyCurrentPagePosition(expandedLogExpected: true);
+
+        currentLogPage.ClosePage(false);
+
+        if (_expandedLogPage == currentLogPage)
+            _expandedLogPage = null;
+
+        OpenExpandedLog();
+    }
+
+    private static void CloseExpandedLog(REPOPopupPage page)
+    {
+        page.ClosePage(false);
+
+        if (_expandedLogPage == page)
+            _expandedLogPage = null;
+
+        ApplyCurrentPagePosition(expandedLogExpected: false);
+    }
+
+    private static Vector2 GetContentPosition()
+    {
+        if (!ExpandedLogIsOpen)
+            return NormalContentPosition;
+
+        return GetContentPositionForExpandedLog();
+    }
+
+    private static Vector2 GetContentPositionForExpandedLog()
+    {
+        return AdminMenuConfig.LogSide.Value == ExpandedLogSide.Left
+            ? RightContentPosition
+            : LeftContentPosition;
+    }
+
+    private static void ApplyCurrentPagePosition(bool expandedLogExpected = false)
+    {
+        if (_currentPage == null)
+            return;
+
+        _currentPage.rectTransform.localPosition =
+            expandedLogExpected || ExpandedLogIsOpen
+                ? GetContentPositionForExpandedLog()
+                : NormalContentPosition;
     }
 
     private static void StyleLogLabel(REPOLabel label, float fontSize, float height)
@@ -233,13 +385,6 @@ internal static class NativeAdminMenu
 
         label.rectTransform.sizeDelta = new Vector2(width, height);
         label.labelTMP.rectTransform.sizeDelta = new Vector2(width, height);
-    }
-
-    private static REPOPopupPage.PresetSide OppositeOfLogSide()
-    {
-        return AdminMenuConfig.LogSide.Value == ExpandedLogSide.Left
-            ? REPOPopupPage.PresetSide.Right
-            : REPOPopupPage.PresetSide.Left;
     }
 
     private static void OnAdminError()
