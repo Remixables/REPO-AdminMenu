@@ -25,8 +25,25 @@ jobs:
       - name: Build
         run: dotnet build AdminMenu.sln -c Release --no-restore
 
+      - name: Find AdminMenu DLL
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path . -Recurse -Filter AdminMenu.dll |
+            Where-Object { $_.FullName -match '[\\/]bin[\\/]Release[\\/]' } |
+            Select-Object -First 1
+
+          if (-not $dll) {
+            throw "AdminMenu.dll was not found."
+          }
+
+          Write-Host "Found DLL at: $($dll.FullName)"
+
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          Copy-Item $dll.FullName artifact/AdminMenu.dll
+
       - name: Upload DLL
         uses: actions/upload-artifact@v4
         with:
           name: AdminMenu-DLL
-          path: bin/Release/netstandard2.1/AdminMenu.dll
+          path: artifact/AdminMenu.dll
+          if-no-files-found: error
