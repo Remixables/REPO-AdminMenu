@@ -20,10 +20,10 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore AdminMenu.sln
+        run: dotnet restore AdminMenu.csproj
 
       - name: Build
-        run: dotnet build AdminMenu.sln -c Release --no-restore
+        run: dotnet build AdminMenu.csproj -c Release --no-restore
 
       - name: Find AdminMenu DLL
         shell: pwsh
