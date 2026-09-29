@@ -1,9 +1,10 @@
 {
   "name": "AdminMenu",
-  "version_number": "0.1.0",
+  "version_number": "0.1.1",
   "website_url": "",
   "description": "Admin and debugging menu foundation for R.E.P.O.",
   "dependencies": [
-    "BepInEx-BepInExPack-5.4.2305"
+    "BepInEx-BepInExPack-5.4.2305",
+    "nickklmao-MenuLib-2.5.2"
   ]
 }
