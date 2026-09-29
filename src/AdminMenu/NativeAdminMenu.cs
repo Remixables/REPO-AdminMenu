@@ -18,7 +18,7 @@ internal static class NativeAdminMenu
     private static readonly Vector2 LeftContentPosition = new(-280f, 0f);
     private static readonly Vector2 RightContentPosition = new(40f, 0f);
 
-    private const float CompactFooterHeight = 88f;
+    private const float CompactFooterHeight = 82f;
     private const float CompactLogWidth = 300f;
     private const float CompactHeaderFontSize = 14f;
     private const float CompactLineFontSize = 8.5f;
@@ -272,6 +272,18 @@ internal static class NativeAdminMenu
             localPosition);
     }
 
+    private static void AddCompactExpandButton(REPOPopupPage page)
+    {
+        var button = MenuAPI.CreateREPOButton(
+            "Expand Log >",
+            OpenExpandedLog,
+            page.rectTransform,
+            new Vector2(380f, 12f));
+
+        button.labelTMP.fontSize = 18f;
+        button.overrideButtonSize = new Vector2(145f, 28f);
+    }
+
     private static void AddCompactLogFooter(REPOPopupPage page)
     {
         var recent = AdminLog.GetRecent(3);
@@ -279,14 +291,14 @@ internal static class NativeAdminMenu
         AddFixedLogLabel(
             page,
             "Action History",
-            new Vector2(330f, 91f),
+            new Vector2(380f, 96f),
             CompactHeaderFontSize,
             CompactLogWidth,
             17f,
             wrap: false);
 
         // Oldest of the three at the top, newest at the bottom.
-        var firstY = 70f;
+        var firstY = 76f;
         for (var i = 0; i < recent.Count; i++)
         {
             var entry = recent[i];
@@ -297,14 +309,14 @@ internal static class NativeAdminMenu
             AddFixedLogLabel(
                 page,
                 text,
-                new Vector2(330f, firstY - (i * 17f)),
+                new Vector2(380f, firstY - (i * 15f)),
                 CompactLineFontSize,
                 CompactLogWidth,
-                17f,
+                15f,
                 wrap: true);
         }
 
-        AddFixedButton(page, "Expand Log >", OpenExpandedLog, new Vector2(330f, 18f));
+        AddCompactExpandButton(page);
     }
 
     private static void AddFixedLogLabel(
@@ -359,7 +371,7 @@ internal static class NativeAdminMenu
 
             var logWidth = GetExpandedLogWidth(page);
 
-            foreach (var entry in AdminLog.Entries.TakeLast(150))
+            foreach (var entry in AdminLog.Entries.Reverse().Take(150))
             {
                 page.AddElementToScrollView(scroll =>
                 {
@@ -387,11 +399,13 @@ internal static class NativeAdminMenu
             };
 
             page.OpenPage(true);
+            page.transform.SetAsLastSibling();
             ApplyCurrentPagePosition(expandedLogExpected: true);
 
-            // MenuLib opens scroll boxes at the top. Preserve chronological order,
-            // but automatically jump to the newest entries at the bottom.
-            MenuManager.instance.StartCoroutine(ScrollExpandedLogToBottom(page));
+            // MenuLib can finish page transitions a frame or two after OpenPage().
+            // Reassert the log as the front-most Admin overlay so the active page
+            // never dims it as if it were in the background.
+            MenuManager.instance.StartCoroutine(BringExpandedLogToFront(page));
         }
         catch (Exception ex)
         {
@@ -426,17 +440,15 @@ internal static class NativeAdminMenu
         return Mathf.Max(220f, maskWidth - 38f);
     }
 
-    private static IEnumerator ScrollExpandedLogToBottom(REPOPopupPage page)
+    private static IEnumerator BringExpandedLogToFront(REPOPopupPage page)
     {
-        // Let MenuLib finish Start(), layout, and scroll range calculation first.
         yield return null;
         yield return null;
 
         if (page == null || !page.isActiveAndEnabled)
             yield break;
 
-        page.scrollView.UpdateElements();
-        page.scrollView.SetScrollPosition(1f);
+        page.transform.SetAsLastSibling();
     }
 
     private static void ChangeExpandedLogSide(REPOPopupPage currentLogPage)
